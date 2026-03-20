@@ -1,0 +1,128 @@
+import { NextRequest, NextResponse } from 'next/server';
+import bcrypt from 'bcryptjs';
+
+const HASURA_ENDPOINT = process.env.HASURA_ENDPOINT || 'http://localhost:8080/v1/graphql';
+const HASURA_ADMIN = process.env.HASURA_ADMIN_SECRET || '';
+
+async function hasura<T = unknown>(query: string, variables: Record<string, unknown>): Promise<T> {
+    const res = await fetch(HASURA_ENDPOINT, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'x-hasura-admin-secret': HASURA_ADMIN,
+        },
+        body: JSON.stringify({ query, variables }),
+    });
+    const json = await res.json();
+    if (json.errors) throw new Error(json.errors[0]?.message ?? 'Hasura error');
+    return json.data as T;
+}
+
+function generateTempPassword(): string {
+    const digits = Math.floor(1000 + Math.random() * 9000);
+    return `Intern@${digits}`;
+}
+
+export async function POST(req: NextRequest) {
+    try {
+        const body = await req.json();
+        const { name, email, phone, college, department_id, start_date, end_date, status } = body as {
+            name: string;
+            email: string;
+            phone?: string | null;
+            college: string;
+            department_id: string;
+            start_date: string;
+            end_date?: string | null;
+            status?: string;
+        };
+
+        if (!name || !email || !college || !department_id || !start_date) {
+            return NextResponse.json({ message: 'Missing required fields' }, { status: 400 });
+        }
+
+        // 1) Check if user already exists
+        type UserCheck = { users: { id: string }[] };
+        const existing = await hasura<UserCheck>(
+            `query CheckEmail($email: String!) {
+                users(where: { email: { _eq: $email } }, limit: 1) { id }
+            }`,
+            { email: email.trim().toLowerCase() }
+        );
+
+        if (existing.users.length > 0) {
+            return NextResponse.json({ message: 'A user with this email already exists' }, { status: 409 });
+        }
+
+        // 2) Create user
+        const tempPassword = generateTempPassword();
+        const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+        type InsertUserResult = {
+            insert_users_one: { id: string; name: string; email: string; role: string };
+        };
+
+        const userResult = await hasura<InsertUserResult>(
+            `mutation CreateUser($obj: users_insert_input!) {
+                insert_users_one(object: $obj) { id name email role }
+            }`,
+            {
+                obj: {
+                    name: name.trim(),
+                    email: email.trim().toLowerCase(),
+                    password_hash: passwordHash,
+                    role: 'intern',
+                    department_id,
+                },
+            }
+        );
+
+        const userId = userResult.insert_users_one.id;
+
+        // 3) Create intern linked to user
+        type InsertInternResult = {
+            insert_interns_one: {
+                id: string;
+                name: string;
+                email: string;
+                status: string;
+                department: { id: string; name: string } | null;
+            };
+        };
+
+        const internResult = await hasura<InsertInternResult>(
+            `mutation CreateIntern($obj: interns_insert_input!) {
+                insert_interns_one(object: $obj) {
+                    id name email status
+                    department { id name }
+                }
+            }`,
+            {
+                obj: {
+                    name: name.trim(),
+                    email: email.trim().toLowerCase(),
+                    phone: phone || null,
+                    college: college.trim(),
+                    department_id,
+                    start_date,
+                    end_date: end_date || null,
+                    status: status || 'active',
+                    user_id: userId,
+                },
+            }
+        );
+
+        return NextResponse.json({
+            intern: internResult.insert_interns_one,
+            credentials: {
+                email: email.trim().toLowerCase(),
+                tempPassword,
+            },
+        });
+    } catch (err) {
+        console.error('[api/interns/create]', err);
+        const message = err instanceof Error ? err.message : 'Internal server error';
+        return NextResponse.json({ message }, { status: 500 });
+    }
+}
+
