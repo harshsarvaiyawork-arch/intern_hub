@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'intern-mgmt-jwt-secret-change-in-prod';
-const HASURA_ENDPOINT = process.env.HASURA_ENDPOINT || 'http://localhost:8081/v1/graphql';
+const HASURA_ENDPOINT = process.env.HASURA_ENDPOINT || 'http://localhost:8080/v1/graphql';
 const HASURA_ADMIN = process.env.HASURA_ADMIN_SECRET || '';
 
 // ── Demo users (fallback when Hasura is not running) ─────────────────────────
