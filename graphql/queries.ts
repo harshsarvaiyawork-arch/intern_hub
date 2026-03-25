@@ -18,15 +18,14 @@ export const GET_INTERNS = gql`
       email
       phone
       college
+      degree
+      branch
       status
       start_date
       end_date
       user_id
       created_at
-      department {
-        id
-        name
-      }
+      department_id
     }
     interns_aggregate(where: $where) {
       aggregate { count }
@@ -42,15 +41,14 @@ export const GET_INTERN_BY_ID = gql`
       email
       phone
       college
+      degree
+      branch
       status
       start_date
       end_date
       user_id
       created_at
-      department {
-        id
-        name
-      }
+      department_id
     }
   }
 `;

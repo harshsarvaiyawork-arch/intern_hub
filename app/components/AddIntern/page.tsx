@@ -10,6 +10,8 @@ export interface InternFormValues {
   email: string;
   phone: string;
   college: string;
+  degree: string;
+  branch: string;
   department_id: string;
   start_date: string;
   end_date: string;
@@ -28,7 +30,7 @@ interface Props {
 }
 
 const empty: InternFormValues = {
-  name: '', email: '', phone: '', college: '',
+  name: '', email: '', phone: '', college: '', degree: '', branch: '',
   department_id: '', start_date: '', end_date: '', status: 'active',
 };
 
@@ -49,6 +51,8 @@ export default function InternFormModal({
         email: initialData.email,
         phone: initialData.phone ?? '',
         college: initialData.college,
+        degree: initialData.degree,
+        branch: initialData.branch,
         department_id: initialData.department_id,
         start_date: initialData.start_date,
         end_date: initialData.end_date ?? '',
@@ -148,6 +152,30 @@ export default function InternFormModal({
         }
         break;
 
+      case 'degree':
+        if (!value.trim()) {
+          newErrors.degree = 'Degree is required';
+        } else if (value.trim().length < 2) {
+          newErrors.degree = 'Degree must be at least 2 characters';
+        } else if (value.trim().length > 100) {
+          newErrors.degree = 'Degree must be less than 100 characters';
+        } else {
+          delete newErrors.degree;
+        }
+        break;
+
+      case 'branch':
+        if (!value.trim()) {
+          newErrors.branch = 'Branch is required';
+        } else if (value.trim().length < 2) {
+          newErrors.branch = 'Branch must be at least 2 characters';
+        } else if (value.trim().length > 100) {
+          newErrors.branch = 'Branch must be less than 100 characters';
+        } else {
+          delete newErrors.branch;
+        }
+        break;
+
       default:
         break;
     }
@@ -177,6 +205,16 @@ export default function InternFormModal({
     if (!form.college.trim()) e.college = 'College is required';
     else if (form.college.trim().length < 2) e.college = 'College name must be at least 2 characters';
     else if (form.college.trim().length > 100) e.college = 'College name must be less than 100 characters';
+
+    // Degree
+    if (!form.degree.trim()) e.degree = 'Degree is required';
+    else if (form.degree.trim().length < 2) e.degree = 'Degree must be at least 2 characters';
+    else if (form.degree.trim().length > 100) e.degree = 'Degree must be less than 100 characters';
+
+    // Branch
+    if (!form.branch.trim()) e.branch = 'Branch is required';
+    else if (form.branch.trim().length < 2) e.branch = 'Branch must be at least 2 characters';
+    else if (form.branch.trim().length > 100) e.branch = 'Branch must be less than 100 characters';
 
     // Department
     if (!form.department_id) e.department_id = 'Department is required';
@@ -260,6 +298,34 @@ export default function InternFormModal({
             className={input(!!showError('college'))} 
           />
           <p className="text-xs text-slate-500 mt-1">{form.college.length}/100</p>
+        </Field>
+      </div>
+
+      {/* Degree + Branch */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <Field label="Degree *" error={showError('degree') ? errors.degree : ''}>
+          <input 
+            type="text" 
+            value={form.degree} 
+            onChange={set('degree')}
+            onBlur={() => handleBlur('degree')}
+            placeholder="B.Tech, MCA, MBA, etc."
+            maxLength={100}
+            className={input(!!showError('degree'))} 
+          />
+          <p className="text-xs text-slate-500 mt-1">{form.degree.length}/100</p>
+        </Field>
+        <Field label="Branch *" error={showError('branch') ? errors.branch : ''}>
+          <input 
+            type="text" 
+            value={form.branch} 
+            onChange={set('branch')}
+            onBlur={() => handleBlur('branch')}
+            placeholder="CSE, IT, ECE, Mech, etc."
+            maxLength={100}
+            className={input(!!showError('branch'))} 
+          />
+          <p className="text-xs text-slate-500 mt-1">{form.branch.length}/100</p>
         </Field>
       </div>
 

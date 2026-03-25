@@ -6,7 +6,6 @@ export const INSERT_INTERN = gql`
       id
       name
       email
-      department { id name }
     }
   }
 `;
@@ -18,7 +17,6 @@ export const UPDATE_INTERN = gql`
       name
       email
       status
-      department { id name }
     }
   }
 `;
