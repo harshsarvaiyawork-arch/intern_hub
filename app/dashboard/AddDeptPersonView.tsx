@@ -1,266 +1,277 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { useQuery } from '@apollo/client/react';
-import { GET_DEPARTMENTS } from '@/graphql/queries';
+import { useState, useCallback } from 'react';
+import { useQuery, useMutation } from '@apollo/client/react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useNavigation } from '@/app/context/NavigationContext';
-import { demoStore } from '@/lib/demoStore';
+import { GET_DEPARTMENTS, GET_DEPARTMENT_PERSONS } from '@/graphql/queries';
+import { INSERT_DEPARTMENT_PERSON, UPDATE_DEPARTMENT_PERSON, DELETE_DEPARTMENT_PERSON } from '@/graphql/mutations';
+import DeptPersonFormModal, { DeptPersonFormValues } from '@/app/components/AddDeptPerson/page';
 
 const IS_DEMO = process.env.NEXT_PUBLIC_DEMO_MODE !== 'false';
 
-interface DeptPersonFormValues {
-    name: string;
-    email: string;
-    phone: string;
-    department_id: string;
-}
-
-interface FormErrors {
-    name?: string;
-    email?: string;
-    phone?: string;
-    department_id?: string;
+interface DeptPerson {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  department_id: string;
+  created_at: string;
 }
 
 export function AddDeptPersonView() {
-    const { user } = useAuth();
-    const { setCurrentView } = useNavigation();
+  const { user } = useAuth();
+  const { setCurrentView } = useNavigation();
 
-    const [formValues, setFormValues] = useState<DeptPersonFormValues>({
-        name: '',
-        email: '',
-        phone: '',
-        department_id: user?.department_id ?? '',
-    });
+  const [search, setSearch] = useState('');
+  const [dept, setDept] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editTarget, setEditTarget] = useState<DeptPerson | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [formBusy, setFormBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
-    const [errors, setErrors] = useState<FormErrors>({});
-    const [touched, setTouched] = useState<Record<string, boolean>>({});
-    const [submitting, setSubmitting] = useState(false);
-    const [submitError, setSubmitError] = useState('');
-    const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const showToast = useCallback((msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
 
-    const { data: deptData } = useQuery(GET_DEPARTMENTS);
-    useEffect(() => { if (deptData?.departments) setDepartments(deptData.departments); }, [deptData]);
+  const { data: personGqlData, loading: gqlLoading, error: gqlError, refetch } = useQuery(
+    GET_DEPARTMENT_PERSONS,
+    {
+      variables: { where: {}, order_by: [{ created_at: 'desc' }] },
+      skip: IS_DEMO,
+    }
+  );
+  const { data: deptData } = useQuery(GET_DEPARTMENTS, { skip: IS_DEMO });
 
-    const validateField = (name: string, value: string): string => {
-        if (name === 'name') {
-            if (!value.trim()) return 'Name is required';
-            if (value.trim().length < 2) return 'Name must be at least 2 characters';
-            if (value.trim().length > 100) return 'Name cannot exceed 100 characters';
-            return '';
-        }
-        if (name === 'email') {
-            if (!value.trim()) return 'Email is required';
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Invalid email format';
-            if (value.length > 100) return 'Email cannot exceed 100 characters';
-            return '';
-        }
-        if (name === 'phone') {
-            if (value && !/^[\+]?[(]?[0-9]{3}[)]?[-\s\.]?[0-9]{3}[-\s\.]?[0-9]{4,6}$/.test(value)) {
-                return 'Invalid phone format';
-            }
-            return '';
-        }
-        if (name === 'department_id') {
-            if (!value) return 'Department is required';
-            return '';
-        }
-        return '';
-    };
+  const [insertMutation] = useMutation(INSERT_DEPARTMENT_PERSON, { onCompleted: () => refetch() });
+  const [updateMutation] = useMutation(UPDATE_DEPARTMENT_PERSON, { onCompleted: () => refetch() });
+  const [deleteMutation] = useMutation(DELETE_DEPARTMENT_PERSON, { onCompleted: () => refetch() });
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
-        setFormValues((prev) => ({ ...prev, [name]: value }));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const gql = personGqlData as any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dep = deptData as any;
 
-        if (touched[name]) {
-            const error = validateField(name, value);
-            setErrors((prev) => ({ ...prev, [name]: error }));
-        }
-    };
+  const persons = IS_DEMO ? [] : (gql?.users ?? []) as DeptPerson[];
+  const depts = IS_DEMO ? [] : (dep?.departments ?? []);
+  const loading = IS_DEMO ? false : gqlLoading;
+  const errorMsg = IS_DEMO ? undefined : gqlError?.message;
 
-    const handleBlur = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
-        setTouched((prev) => ({ ...prev, [name]: true }));
-        const error = validateField(name, value);
-        setErrors((prev) => ({ ...prev, [name]: error }));
-    };
+  const handleEdit = (person: DeptPerson) => {
+    setEditTarget(person);
+    setShowForm(true);
+  };
 
-    const validateForm = (): boolean => {
-        const newErrors: FormErrors = {};
-        Object.entries(formValues).forEach(([key, value]) => {
-            const error = validateField(key, value);
-            if (error) newErrors[key as keyof FormErrors] = error;
+  const handleFormSubmit = async (values: DeptPersonFormValues) => {
+    setFormBusy(true);
+    try {
+      if (editTarget) {
+        // Update: use mutation
+        const payload = {
+          name: values.name.trim(),
+          email: values.email.trim().toLowerCase(),
+          phone: values.phone || undefined,
+          department_id: values.department_id,
+        };
+        await updateMutation({ variables: { id: editTarget.id, set: payload } });
+        showToast(`${values.name} updated successfully`);
+      } else {
+        // Insert: use API route to handle password generation
+        const res = await fetch('/api/users/create-department-person', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: values.name.trim(),
+            email: values.email.trim().toLowerCase(),
+            phone: values.phone || null,
+            department_id: values.department_id,
+          }),
         });
-        setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
-    };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!validateForm()) return;
-
-        setSubmitting(true);
-        setSubmitError('');
-
-        try {
-            const payload = {
-                name: formValues.name.trim(),
-                email: formValues.email.trim().toLowerCase(),
-                phone: formValues.phone || undefined,
-                department_id: formValues.department_id,
-            };
-
-            if (IS_DEMO) {
-                demoStore.addDeptPerson(payload);
-                setCurrentView('dashboard');
-            } else {
-                const res = await fetch('/api/users/create-department-person', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        name: payload.name,
-                        email: payload.email,
-                        phone: payload.phone ?? null,
-                        department_id: payload.department_id,
-                    }),
-                });
-
-                if (!res.ok) {
-                    const data = await res.json();
-                    throw new Error(data.message || 'Failed to add department person');
-                }
-
-                setCurrentView('dashboard');
-            }
-        } catch (err) {
-            setSubmitError(err instanceof Error ? err.message : 'Failed to add department person');
-            setSubmitting(false);
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.message || 'Failed to add department person');
         }
-    };
 
-    const isFormValid = !Object.values(errors).some((e) => e);
-    const isFormTouched = Object.values(touched).some((t) => t);
+        await refetch();
+        showToast(`${values.name} added successfully`);
+      }
+      setShowForm(false);
+      setEditTarget(null);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Operation failed', 'error');
+    } finally {
+      setFormBusy(false);
+    }
+  };
 
-    return (
-        <div className="max-w-2xl mx-auto">
-            <div className="mb-6">
-                <h2 className="text-2xl font-bold text-slate-800">Add Department Person</h2>
-                <p className="text-sm text-slate-500 mt-1">Register a new department staff member</p>
-            </div>
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    try {
+      await deleteMutation({ variables: { id: deleteTarget.id } });
+      showToast(`${deleteTarget.name} deleted`);
+      setDeleteTarget(null);
+    } catch {
+      showToast('Delete failed', 'error');
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
 
-            <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-5">
-                {submitError && (
-                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
-                        {submitError}
-                    </div>
-                )}
+  const isAdmin = user?.role === 'admin';
 
-                <div>
-                    <label htmlFor="name" className="block text-sm font-semibold text-slate-700 mb-1.5">
-                        Full Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                        type="text"
-                        id="name"
-                        name="name"
-                        value={formValues.name}
-                        onChange={handleChange}
-                        onBlur={handleBlur}
-                        placeholder="John Doe"
-                        className={`w-full px-3.5 py-2.5 border rounded-xl text-sm transition-colors ${
-                            touched.name && errors.name ? 'border-red-500 bg-red-50' : 'border-slate-200'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
-                    />
-                    {touched.name && errors.name && (
-                        <p className="text-red-600 text-xs mt-1.5">{errors.name}</p>
-                    )}
-                    <p className="text-slate-400 text-xs mt-1">{formValues.name.length}/100</p>
-                </div>
-
-                <div>
-                    <label htmlFor="email" className="block text-sm font-semibold text-slate-700 mb-1.5">
-                        Email <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                        type="email"
-                        id="email"
-                        name="email"
-                        value={formValues.email}
-                        onChange={handleChange}
-                        onBlur={handleBlur}
-                        placeholder="john@example.com"
-                        className={`w-full px-3.5 py-2.5 border rounded-xl text-sm transition-colors ${
-                            touched.email && errors.email ? 'border-red-500 bg-red-50' : 'border-slate-200'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
-                    />
-                    {touched.email && errors.email && (
-                        <p className="text-red-600 text-xs mt-1.5">{errors.email}</p>
-                    )}
-                    <p className="text-slate-400 text-xs mt-1">{formValues.email.length}/100</p>
-                </div>
-
-                <div>
-                    <label htmlFor="phone" className="block text-sm font-semibold text-slate-700 mb-1.5">
-                        Phone <span className="text-slate-400">(optional)</span>
-                    </label>
-                    <input
-                        type="tel"
-                        id="phone"
-                        name="phone"
-                        value={formValues.phone}
-                        onChange={handleChange}
-                        onBlur={handleBlur}
-                        placeholder="+1 (555) 123-4567"
-                        className={`w-full px-3.5 py-2.5 border rounded-xl text-sm transition-colors ${
-                            touched.phone && errors.phone ? 'border-red-500 bg-red-50' : 'border-slate-200'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
-                    />
-                    {touched.phone && errors.phone && (
-                        <p className="text-red-600 text-xs mt-1.5">{errors.phone}</p>
-                    )}
-                </div>
-
-                <div>
-                    <label htmlFor="department_id" className="block text-sm font-semibold text-slate-700 mb-1.5">
-                        Department <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                        id="department_id"
-                        name="department_id"
-                        value={formValues.department_id}
-                        onChange={handleChange}
-                        onBlur={handleBlur}
-                        className={`w-full px-3.5 py-2.5 border rounded-xl text-sm transition-colors ${
-                            touched.department_id && errors.department_id ? 'border-red-500 bg-red-50' : 'border-slate-200'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
-                    >
-                        <option value="">Select a department</option>
-                        {(IS_DEMO ? demoStore.getDepartments() : departments).map((dept: { id: string; name: string }) => (
-                            <option key={dept.id} value={dept.id}>{dept.name}</option>
-                        ))}
-                    </select>
-                    {touched.department_id && errors.department_id && (
-                        <p className="text-red-600 text-xs mt-1.5">{errors.department_id}</p>
-                    )}
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                    <button
-                        type="button"
-                        onClick={() => setCurrentView('dashboard')}
-                        className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="submit"
-                        disabled={!isFormValid || submitting}
-                        className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                        {submitting ? 'Adding...' : 'Add Person'}
-                    </button>
-                </div>
-            </form>
+  return (
+    <div className="max-w-5xl mx-auto space-y-5">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">Department Persons</h2>
+          <p className="text-sm text-slate-500 mt-0.5">
+            {persons.length} person{persons.length !== 1 ? 's' : ''} found
+          </p>
         </div>
-    );
+        {isAdmin && (
+          <button
+            onClick={() => { setEditTarget(null); setShowForm(true); }}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors shadow-sm"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add Person
+          </button>
+        )}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        {loading && (
+          <div className="flex items-center justify-center py-20 text-slate-400">
+            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mr-3" />
+            Loading…
+          </div>
+        )}
+
+        {errorMsg && (
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-5 py-4 text-sm m-5">
+            <strong>Error:</strong> {errorMsg}
+          </div>
+        )}
+
+        {!loading && persons.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+            <svg className="w-12 h-12 mb-3 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <p className="font-medium">No department persons found</p>
+          </div>
+        )}
+
+        {!loading && persons.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  {['#', 'Name', 'Email', 'Phone', 'Department', 'Actions'].map((h) => (
+                    <th key={h} className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {persons.map((person, idx) => (
+                  <tr key={person.id} className="bg-white hover:bg-slate-50 transition-colors">
+                    <td className="px-4 py-3 text-slate-400 text-xs">{idx + 1}</td>
+                    <td className="px-4 py-3">
+                      <div>
+                        <p className="font-medium text-slate-800">{person.name}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{person.email}</p>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{person.email}</td>
+                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{person.phone || '—'}</td>
+                    <td className="px-4 py-3">
+                      <span className="inline-block bg-indigo-50 text-indigo-700 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                        {depts.find((d: any) => d.id === person.department_id)?.name ?? '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {isAdmin && (
+                          <>
+                            <button
+                              onClick={() => handleEdit(person)}
+                              className="text-blue-600 hover:text-blue-800 font-medium text-xs"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => setDeleteTarget({ id: person.id, name: person.name })}
+                              className="text-red-600 hover:text-red-800 font-medium text-xs"
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <DeptPersonFormModal
+        isOpen={showForm}
+        onClose={() => { setShowForm(false); setEditTarget(null); }}
+        onSubmit={handleFormSubmit}
+        initialData={editTarget}
+        departments={depts}
+        submitting={formBusy}
+      />
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setDeleteTarget(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-bold text-slate-800 mb-2">Delete Person?</h3>
+            <p className="text-slate-600 text-sm mb-6">
+              Are you sure you want to delete <strong>{deleteTarget.name}</strong>? This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={deleteBusy}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white rounded-lg text-sm font-semibold"
+              >
+                {deleteBusy ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg text-sm font-medium animate-fade-in ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+          }`}>
+          {toast.type === 'success'
+            ? <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+            : <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          }
+          {toast.msg}
+        </div>
+      )}
+    </div>
+  );
 }

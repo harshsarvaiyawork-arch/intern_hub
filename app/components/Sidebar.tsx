@@ -39,7 +39,7 @@ const NAV = [
         ),
     },
     {
-        label: 'Add Dept. Person',
+        label: 'Department Persons',
         view: 'add-dept-person' as PageView,
         roles: ['admin'],
         icon: (
