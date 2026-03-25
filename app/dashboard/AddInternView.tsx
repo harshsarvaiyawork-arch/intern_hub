@@ -1,5 +1,8 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation } from '@apollo/client/react';
+import { GET_DEPARTMENTS, GET_INTERNS, GET_DASHBOARD_STATS } from '@/graphql/queries';
+import { INSERT_INTERN } from '@/graphql/mutations';
 import { useAuth } from '@/app/context/AuthContext';
 import { useNavigation } from '@/app/context/NavigationContext';
 import { demoStore } from '@/lib/demoStore';
@@ -16,6 +19,19 @@ export function AddInternView() {
     const [demoRefresh, setDemoRefresh] = useState(0);
 
     const [departments, setDepartments] = useState(IS_DEMO ? DEMO_DEPARTMENTS : []);
+    const { data: deptData } = useQuery(GET_DEPARTMENTS);
+    useEffect(() => { if (deptData?.departments) setDepartments(deptData.departments); }, [deptData]);
+
+    const [insertMutation] = useMutation(INSERT_INTERN, {
+        refetchQueries: [
+            { query: GET_INTERNS, variables: { where: {}, order_by: [{ created_at: 'desc' }] } },
+            { query: GET_DASHBOARD_STATS }
+        ],
+        onCompleted: () => { 
+            setCurrentView('interns'); 
+            setSubmitting(false); 
+        }
+    });
 
     if (user && user.role !== 'admin') {
         return (
@@ -35,6 +51,8 @@ export function AddInternView() {
                 email: values.email.trim().toLowerCase(),
                 phone: values.phone || undefined,
                 college: values.college.trim(),
+                degree: values.degree.trim(),
+                branch: values.branch.trim(),
                 department_id: values.department_id,
                 start_date: values.start_date,
                 end_date: values.end_date || undefined,
@@ -46,25 +64,22 @@ export function AddInternView() {
                 setCurrentView('interns');
                 setDemoRefresh((n) => n + 1);
             } else {
-                const res = await fetch('/api/interns/create', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        name: payload.name,
-                        email: payload.email,
-                        phone: payload.phone ?? null,
-                        college: payload.college,
-                        department_id: payload.department_id,
-                        start_date: payload.start_date,
-                        end_date: payload.end_date ?? null,
-                        status: payload.status,
-                    }),
+                await insertMutation({
+                    variables: { 
+                        object: {
+                            name: payload.name,
+                            email: payload.email,
+                            phone: payload.phone ?? null,
+                            college: payload.college,
+                            degree: payload.degree,
+                            branch: payload.branch,
+                            department_id: payload.department_id,
+                            start_date: payload.start_date,
+                            end_date: payload.end_date ?? null,
+                            status: payload.status,
+                        }
+                    }
                 });
-                if (!res.ok) {
-                    const data = await res.json();
-                    throw new Error(data.message || 'Failed to add intern');
-                }
-                setCurrentView('interns');
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to add intern');

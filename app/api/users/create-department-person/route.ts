@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 
-const HASURA_ENDPOINT = process.env.HASURA_ENDPOINT || 'http://localhost:8080/v1/graphql';
+const HASURA_ENDPOINT = process.env.HASURA_ENDPOINT || 'http://localhost:8081/v1/graphql';
 const HASURA_ADMIN = process.env.HASURA_ADMIN_SECRET || '';
 
 async function hasura<T = unknown>(query: string, variables: Record<string, unknown>): Promise<T> {
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
         // 1) Check if user already exists
         type UserCheck = { users: { id: string }[] };
         const existing = await hasura<UserCheck>(
-            `query CheckEmail($email: String!) {
+            `query CheckEmail($email: citext!) {
               users(where: { email: { _eq: $email } }, limit: 1) { id }
             }`,
             { email }
@@ -63,7 +63,6 @@ export async function POST(req: NextRequest) {
                 name: string;
                 email: string;
                 role: string;
-                department: { id: string; name: string } | null;
             };
         };
 
@@ -71,7 +70,6 @@ export async function POST(req: NextRequest) {
             `mutation CreateDepartmentPerson($obj: users_insert_input!) {
               insert_users_one(object: $obj) {
                 id name email role
-                department { id name }
               }
             }`,
             {

@@ -1,5 +1,7 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useQuery } from '@apollo/client/react';
+import { GET_DEPARTMENTS } from '@/graphql/queries';
 import { useAuth } from '@/app/context/AuthContext';
 import { useNavigation } from '@/app/context/NavigationContext';
 import { demoStore } from '@/lib/demoStore';
@@ -35,6 +37,10 @@ export function AddDeptPersonView() {
     const [touched, setTouched] = useState<Record<string, boolean>>({});
     const [submitting, setSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState('');
+    const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+
+    const { data: deptData } = useQuery(GET_DEPARTMENTS);
+    useEffect(() => { if (deptData?.departments) setDepartments(deptData.departments); }, [deptData]);
 
     const validateField = (name: string, value: string): string => {
         if (name === 'name') {
@@ -229,7 +235,7 @@ export function AddDeptPersonView() {
                         } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
                     >
                         <option value="">Select a department</option>
-                        {(IS_DEMO ? demoStore.getDepartments() : []).map((dept: { id: string; name: string }) => (
+                        {(IS_DEMO ? demoStore.getDepartments() : departments).map((dept: { id: string; name: string }) => (
                             <option key={dept.id} value={dept.id}>{dept.name}</option>
                         ))}
                     </select>

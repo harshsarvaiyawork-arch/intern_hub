@@ -6,7 +6,7 @@ import { useNavigation } from '@/app/context/NavigationContext';
 import { demoStore } from '@/lib/demoStore';
 import { INTERN_STATUSES, InternData } from '@/lib/constants';
 import {
-    GET_INTERNS, GET_DEPARTMENTS, GET_COLLEGES,
+    GET_INTERNS, GET_DEPARTMENTS, GET_COLLEGES, GET_DASHBOARD_STATS,
 } from '@/graphql/queries';
 import {
     INSERT_INTERN, UPDATE_INTERN, DELETE_INTERN,
@@ -76,10 +76,17 @@ export function InternsView() {
     );
     const { data: deptData } = useQuery(GET_DEPARTMENTS, { skip: IS_DEMO });
     const { data: collegeData } = useQuery(GET_COLLEGES, { skip: IS_DEMO });
+    const { refetch: refetchStats } = useQuery(GET_DASHBOARD_STATS, { skip: IS_DEMO });
 
-    const [insertMutation] = useMutation(INSERT_INTERN, { onCompleted: () => refetch() });
-    const [updateMutation] = useMutation(UPDATE_INTERN, { onCompleted: () => refetch() });
-    const [deleteMutation] = useMutation(DELETE_INTERN, { onCompleted: () => refetch() });
+    const [insertMutation] = useMutation(INSERT_INTERN, { 
+        onCompleted: () => { refetch(); refetchStats(); }
+    });
+    const [updateMutation] = useMutation(UPDATE_INTERN, { 
+        onCompleted: () => { refetch(); refetchStats(); }
+    });
+    const [deleteMutation] = useMutation(DELETE_INTERN, { 
+        onCompleted: () => { refetch(); refetchStats(); }
+    });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const gql = internGqlData as any;
@@ -107,6 +114,8 @@ export function InternsView() {
                 email: values.email.trim().toLowerCase(),
                 phone: values.phone || undefined,
                 college: values.college.trim(),
+                degree: values.degree.trim(),
+                branch: values.branch.trim(),
                 department_id: values.department_id,
                 start_date: values.start_date,
                 end_date: values.end_date || undefined,
@@ -201,6 +210,7 @@ export function InternsView() {
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <InternTable
                     interns={interns}
+                    departments={depts}
                     loading={loading}
                     error={errorMsg}
                     userRole={user?.role ?? 'intern'}

@@ -2,7 +2,7 @@ import { ApolloClient, InMemoryCache, createHttpLink, from } from '@apollo/clien
 import { setContext } from '@apollo/client/link/context';
 
 const httpLink = createHttpLink({
-    uri: process.env.NEXT_PUBLIC_HASURA_ENDPOINT || 'http://localhost:8080/v1/graphql',
+    uri: process.env.NEXT_PUBLIC_HASURA_ENDPOINT || 'http://localhost:8081/v1/graphql',
 });
 
 // Dynamically attaches JWT or admin-secret before every request
