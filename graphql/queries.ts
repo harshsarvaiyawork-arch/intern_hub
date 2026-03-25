@@ -79,3 +79,25 @@ export const GET_DASHBOARD_STATS = gql`
     dept_count: departments_aggregate                                     { aggregate { count } }
   }
 `;
+
+export const GET_DEPARTMENT_PERSONS = gql`
+  query GetDepartmentPersons(
+    $where:    users_bool_exp!
+    $order_by: [users_order_by!]
+  ) {
+    users(
+      where: { _and: [{ role: { _eq: "department_person" } }, $where] }
+      order_by: $order_by
+    ) {
+      id
+      name
+      email
+      phone
+      department_id
+      created_at
+    }
+    users_aggregate(where: { _and: [{ role: { _eq: "department_person" } }, $where] }) {
+      aggregate { count }
+    }
+  }
+`;

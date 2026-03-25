@@ -29,11 +29,13 @@ export async function POST(req: NextRequest) {
         const body = (await req.json()) as {
             name: string;
             email: string;
+            phone?: string;
             department_id: string;
         };
 
         const name = body?.name?.trim();
         const email = body?.email?.trim().toLowerCase();
+        const phone = body?.phone?.trim() || null;
         const department_id = body?.department_id;
 
         if (!name || !email || !department_id) {
@@ -76,6 +78,7 @@ export async function POST(req: NextRequest) {
                 obj: {
                     name,
                     email,
+                    phone,
                     password_hash: passwordHash,
                     role: 'department_person',
                     department_id,
