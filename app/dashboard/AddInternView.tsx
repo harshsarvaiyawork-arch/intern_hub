@@ -1,8 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { useQuery, useMutation } from '@apollo/client/react';
+import { useQuery } from '@apollo/client/react';
 import { GET_DEPARTMENTS, GET_INTERNS, GET_DASHBOARD_STATS } from '@/graphql/queries';
-import { INSERT_INTERN } from '@/graphql/mutations';
 import { useAuth } from '@/app/context/AuthContext';
 import { useNavigation } from '@/app/context/NavigationContext';
 import { demoStore } from '@/lib/demoStore';
@@ -19,19 +18,17 @@ export function AddInternView() {
     const [demoRefresh, setDemoRefresh] = useState(0);
 
     const [departments, setDepartments] = useState(IS_DEMO ? DEMO_DEPARTMENTS : []);
-    const { data: deptData } = useQuery(GET_DEPARTMENTS);
-    useEffect(() => { if (deptData?.departments) setDepartments(deptData.departments); }, [deptData]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: deptData } = useQuery(GET_DEPARTMENTS, { skip: IS_DEMO }) as any;
+    useEffect(() => { 
+      if (deptData?.departments) setDepartments(deptData.departments);
+    }, [deptData]);
 
-    const [insertMutation] = useMutation(INSERT_INTERN, {
-        refetchQueries: [
-            { query: GET_INTERNS, variables: { where: {}, order_by: [{ created_at: 'desc' }] } },
-            { query: GET_DASHBOARD_STATS }
-        ],
-        onCompleted: () => { 
-            setCurrentView('interns'); 
-            setSubmitting(false); 
-        }
+    const { refetch: refetchInterns } = useQuery(GET_INTERNS, { 
+      variables: { where: {}, order_by: [{ created_at: 'desc' }] },
+      skip: IS_DEMO 
     });
+    const { refetch: refetchStats } = useQuery(GET_DASHBOARD_STATS, { skip: IS_DEMO });
 
     if (user && user.role !== 'admin') {
         return (
@@ -46,40 +43,47 @@ export function AddInternView() {
         setSubmitting(true);
         setError('');
         try {
-            const payload = {
-                name: values.name.trim(),
-                email: values.email.trim().toLowerCase(),
-                phone: values.phone || undefined,
-                college: values.college.trim(),
-                degree: values.degree.trim(),
-                branch: values.branch.trim(),
-                department_id: values.department_id,
-                start_date: values.start_date,
-                end_date: values.end_date || undefined,
-                status: values.status,
-            };
-
             if (IS_DEMO) {
-                demoStore.create(payload);
+                demoStore.create({
+                    name: values.name.trim(),
+                    email: values.email.trim().toLowerCase(),
+                    phone: values.phone || undefined,
+                    college: values.college.trim(),
+                    degree: values.degree.trim(),
+                    branch: values.branch.trim(),
+                    department_id: values.department_id,
+                    start_date: values.start_date,
+                    end_date: values.end_date || undefined,
+                    status: values.status,
+                });
                 setCurrentView('interns');
                 setDemoRefresh((n) => n + 1);
             } else {
-                await insertMutation({
-                    variables: { 
-                        object: {
-                            name: payload.name,
-                            email: payload.email,
-                            phone: payload.phone ?? null,
-                            college: payload.college,
-                            degree: payload.degree,
-                            branch: payload.branch,
-                            department_id: payload.department_id,
-                            start_date: payload.start_date,
-                            end_date: payload.end_date ?? null,
-                            status: payload.status,
-                        }
-                    }
+                const res = await fetch('/api/interns/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: values.name.trim(),
+                        email: values.email.trim().toLowerCase(),
+                        phone: values.phone || null,
+                        college: values.college.trim(),
+                        degree: values.degree.trim(),
+                        branch: values.branch.trim(),
+                        department_id: values.department_id,
+                        start_date: values.start_date,
+                        end_date: values.end_date || null,
+                        status: values.status,
+                    }),
                 });
+
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.message || 'Failed to add intern');
+                }
+
+                // Refetch data to update UI
+                await Promise.all([refetchInterns(), refetchStats()]);
+                setCurrentView('interns');
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to add intern');

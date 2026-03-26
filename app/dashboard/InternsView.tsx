@@ -1,6 +1,6 @@
 'use client';
 import { useState, useCallback, useMemo } from 'react';
-import { useQuery, useMutation } from '@apollo/client/react';
+import { useQuery } from '@apollo/client/react';
 import { useAuth } from '@/app/context/AuthContext';
 import { useNavigation } from '@/app/context/NavigationContext';
 import { demoStore } from '@/lib/demoStore';
@@ -8,9 +8,6 @@ import { INTERN_STATUSES, InternData } from '@/lib/constants';
 import {
     GET_INTERNS, GET_DEPARTMENTS, GET_COLLEGES, GET_DASHBOARD_STATS,
 } from '@/graphql/queries';
-import {
-    INSERT_INTERN, UPDATE_INTERN, DELETE_INTERN,
-} from '@/graphql/mutations';
 import InternTable from '@/app/components/InternList/page';
 import InternFormModal, { InternFormValues } from '@/app/components/AddIntern/page';
 import { FilterBar } from './FilterBar';
@@ -78,16 +75,6 @@ export function InternsView() {
     const { data: collegeData } = useQuery(GET_COLLEGES, { skip: IS_DEMO });
     const { refetch: refetchStats } = useQuery(GET_DASHBOARD_STATS, { skip: IS_DEMO });
 
-    const [insertMutation] = useMutation(INSERT_INTERN, { 
-        onCompleted: () => { refetch(); refetchStats(); }
-    });
-    const [updateMutation] = useMutation(UPDATE_INTERN, { 
-        onCompleted: () => { refetch(); refetchStats(); }
-    });
-    const [deleteMutation] = useMutation(DELETE_INTERN, { 
-        onCompleted: () => { refetch(); refetchStats(); }
-    });
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const gql = internGqlData as any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -109,34 +96,89 @@ export function InternsView() {
     const handleFormSubmit = async (values: InternFormValues) => {
         setFormBusy(true);
         try {
-            const payload = {
-                name: values.name.trim(),
-                email: values.email.trim().toLowerCase(),
-                phone: values.phone || undefined,
-                college: values.college.trim(),
-                degree: values.degree.trim(),
-                branch: values.branch.trim(),
-                department_id: values.department_id,
-                start_date: values.start_date,
-                end_date: values.end_date || undefined,
-                status: values.status,
-            };
-
             if (IS_DEMO) {
                 if (editTarget) {
-                    demoStore.update(editTarget.id, payload);
+                    demoStore.update(editTarget.id, {
+                        name: values.name.trim(),
+                        email: values.email.trim().toLowerCase(),
+                        phone: values.phone || undefined,
+                        college: values.college.trim(),
+                        degree: values.degree.trim(),
+                        branch: values.branch.trim(),
+                        department_id: values.department_id,
+                        start_date: values.start_date,
+                        end_date: values.end_date || undefined,
+                        status: values.status,
+                    });
                     showToast(`${values.name} updated successfully`);
                 } else {
-                    demoStore.create(payload);
+                    demoStore.create({
+                        name: values.name.trim(),
+                        email: values.email.trim().toLowerCase(),
+                        phone: values.phone || undefined,
+                        college: values.college.trim(),
+                        degree: values.degree.trim(),
+                        branch: values.branch.trim(),
+                        department_id: values.department_id,
+                        start_date: values.start_date,
+                        end_date: values.end_date || undefined,
+                        status: values.status,
+                    });
                     showToast(`${values.name} added successfully`);
                 }
                 setDemoRefresh((n) => n + 1);
             } else {
                 if (editTarget) {
-                    await updateMutation({ variables: { id: editTarget.id, set: payload } });
+                    const res = await fetch('/api/interns/update', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            id: editTarget.id,
+                            name: values.name.trim(),
+                            email: values.email.trim().toLowerCase(),
+                            phone: values.phone || null,
+                            college: values.college.trim(),
+                            degree: values.degree.trim(),
+                            branch: values.branch.trim(),
+                            department_id: values.department_id,
+                            start_date: values.start_date,
+                            end_date: values.end_date || null,
+                            status: values.status,
+                        }),
+                    });
+
+                    if (!res.ok) {
+                        const data = await res.json();
+                        throw new Error(data.message || 'Failed to update intern');
+                    }
+
+                    await Promise.all([refetch(), refetchStats()]);
                     showToast(`${values.name} updated successfully`);
                 } else {
-                    await insertMutation({ variables: { object: payload } });
+                    // Use API route to create intern AND user
+                    const res = await fetch('/api/interns/create', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name: values.name.trim(),
+                            email: values.email.trim().toLowerCase(),
+                            phone: values.phone || null,
+                            college: values.college.trim(),
+                            degree: values.degree.trim(),
+                            branch: values.branch.trim(),
+                            department_id: values.department_id,
+                            start_date: values.start_date,
+                            end_date: values.end_date || null,
+                            status: values.status,
+                        }),
+                    });
+
+                    if (!res.ok) {
+                        const data = await res.json();
+                        throw new Error(data.message || 'Failed to add intern');
+                    }
+
+                    await Promise.all([refetch(), refetchStats()]);
                     showToast(`${values.name} added successfully`);
                 }
             }
@@ -157,12 +199,23 @@ export function InternsView() {
                 demoStore.delete(deleteTarget.id);
                 setDemoRefresh((n) => n + 1);
             } else {
-                await deleteMutation({ variables: { id: deleteTarget.id } });
+                const res = await fetch('/api/interns/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: deleteTarget.id }),
+                });
+
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.message || 'Failed to delete intern');
+                }
+
+                await Promise.all([refetch(), refetchStats()]);
             }
             showToast(`${deleteTarget.name} deleted`);
             setDeleteTarget(null);
-        } catch {
-            showToast('Delete failed', 'error');
+        } catch (err) {
+            showToast(err instanceof Error ? err.message : 'Delete failed', 'error');
         } finally {
             setDeleteBusy(false);
         }
