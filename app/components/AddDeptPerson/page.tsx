@@ -84,8 +84,10 @@ export default function DeptPersonFormModal({
         break;
 
       case 'phone':
-        if (value && !/^[\d+\-() ]{7,20}$/.test(value)) {
-          newErrors.phone = 'Invalid phone format';
+        if (!value.trim()) {
+          newErrors.phone = 'Phone is required';
+        } else if (value.replace(/\D/g, '').length !== 10) {
+          newErrors.phone = 'Phone must contain exactly 10 digits';
         } else {
           delete newErrors.phone;
         }
@@ -117,9 +119,8 @@ export default function DeptPersonFormModal({
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = 'Invalid email format';
     else if (form.email.length > 100) e.email = 'Email must be less than 100 characters';
 
-    if (form.phone && !/^[\d+\-() ]{7,20}$/.test(form.phone)) {
-      e.phone = 'Invalid phone format';
-    }
+    if (!form.phone.trim()) e.phone = 'Phone is required';
+    else if (form.phone.replace(/\D/g, '').length !== 10) e.phone = 'Phone must contain exactly 10 digits';
 
     if (!form.department_id) e.department_id = 'Department is required';
 
@@ -184,16 +185,16 @@ export default function DeptPersonFormModal({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Phone" error={showError('phone') ? errors.phone : ''}>
+            <Field label="Phone *" error={showError('phone') ? errors.phone : ''}>
               <input 
                 type="tel" 
                 value={form.phone} 
                 onChange={set('phone')}
                 onBlur={() => handleBlur('phone')}
-                placeholder="+91 9876543210"
+                placeholder="9876543210"
                 className={input(!!showError('phone'))} 
               />
-              <p className="text-xs text-slate-500 mt-1">Optional</p>
+              {/* <p className="text-xs text-slate-500 mt-1">Optional</p> */}
             </Field>
             <Field label="Department *" error={showError('department_id') ? errors.department_id : ''}>
               <select 
