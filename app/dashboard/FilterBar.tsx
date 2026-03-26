@@ -1,4 +1,5 @@
-import { DEPARTMENTS, INTERN_STATUSES } from '@/lib/constants';
+import { INTERN_STATUSES } from '@/lib/constants';
+import type { DepartmentData } from '@/lib/constants';
 
 export function FilterBar({
     search, setSearch,
@@ -7,6 +8,7 @@ export function FilterBar({
     status, setStatus,
     onClear,
     colleges, showDeptFilter,
+    departments = [],
 }: {
     search: string; setSearch: (v: string) => void;
     dept: string; setDept: (v: string) => void;
@@ -15,6 +17,7 @@ export function FilterBar({
     onClear: () => void;
     colleges: string[];
     showDeptFilter: boolean;
+    departments?: DepartmentData[];
 }) {
     const hasFilter = search || dept || college || status;
     return (
@@ -40,7 +43,7 @@ export function FilterBar({
                         className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 text-slate-700"
                     >
                         <option value="">All Departments</option>
-                        {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
+                        {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </select>
                 )}
 
@@ -74,7 +77,12 @@ export function FilterBar({
             {hasFilter && (
                 <div className="mt-3 flex items-center gap-2">
                     <span className="text-xs text-slate-500">Active filters:</span>
-                    {[search && `Name: "${search}"`, dept && `Dept: ${dept}`, college && `College: "${college}"`, status && `Status: ${status}`]
+                    {[
+                        search && `Name: "${search}"`,
+                        dept && `Dept: ${departments.find((d) => d.id === dept)?.name || dept}`,
+                        college && `College: "${college}"`,
+                        status && `Status: ${status}`
+                    ]
                         .filter(Boolean)
                         .map((tag) => (
                             <span key={tag as string} className="inline-flex items-center bg-blue-50 text-blue-700 text-xs font-medium px-2.5 py-0.5 rounded-full">

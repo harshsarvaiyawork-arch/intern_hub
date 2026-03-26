@@ -72,6 +72,7 @@ export async function POST(req: NextRequest) {
                 obj: {
                     name: name.trim(),
                     email: email.trim().toLowerCase(),
+                    phone: phone || null,
                     password_hash: passwordHash,
                     role: 'intern',
                     department_id,
