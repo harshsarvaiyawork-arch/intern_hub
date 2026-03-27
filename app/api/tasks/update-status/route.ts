@@ -11,7 +11,8 @@ interface DecodedToken {
 }
 
 async function executeGraphQL(query: string, variables: any, adminSecret: string) {
-  const response = await fetch(`${process.env.NEXT_PUBLIC_HASURA_ENDPOINT}`, {
+  const HASURA_ENDPOINT = process.env.HASURA_ENDPOINT || 'http://localhost:8080/v1/graphql';
+  const response = await fetch(`${HASURA_ENDPOINT}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -37,7 +38,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const decoded = jwt.decode(token) as DecodedToken;
+    const JWT_SECRET = process.env.JWT_SECRET || 'intern-mgmt-jwt-secret-change-in-prod';
+    const decoded = jwt.verify(token, JWT_SECRET) as DecodedToken;
     const userRole = decoded['https://hasura.io/jwt/claims']['x-hasura-role'];
     const departmentId = decoded['https://hasura.io/jwt/claims']['x-hasura-department-id'];
 
@@ -78,6 +80,19 @@ export async function POST(request: NextRequest) {
       if (status !== 'completed') {
         return NextResponse.json({ error: 'Interns can only mark tasks as complete' }, { status: 403 });
       }
+      // ✅ Verify task is assigned to this intern
+      const userId = decoded['https://hasura.io/jwt/claims']['x-hasura-user-id'];
+      const checkQuery = `
+    query CheckTaskIntern($task_id: uuid!, $intern_id: uuid!) {
+      task_interns(where: { task_id: { _eq: $task_id }, intern_id: { _eq: $intern_id } }) {
+        task_id
+      }
+    }
+  `;
+      const checkResult = await executeGraphQL(checkQuery, { task_id: id, intern_id: userId }, process.env.HASURA_ADMIN_SECRET!);
+      if (checkResult.data.task_interns.length === 0) {
+        return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
+      }
     } else {
       return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
     }
@@ -93,7 +108,7 @@ export async function POST(request: NextRequest) {
       }
     `;
 
-    const completionDate = status === 'completed' 
+    const completionDate = status === 'completed'
       ? (completed_date || new Date().toISOString().split('T')[0])
       : null;
 
@@ -105,8 +120,8 @@ export async function POST(request: NextRequest) {
       },
     }, process.env.HASURA_ADMIN_SECRET!);
 
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       status: result.data.update_tasks_by_pk.status,
       completed_date: result.data.update_tasks_by_pk.completed_date,
     });

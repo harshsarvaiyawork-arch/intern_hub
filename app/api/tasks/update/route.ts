@@ -11,7 +11,8 @@ interface DecodedToken {
 }
 
 async function executeGraphQL(query: string, variables: any, adminSecret: string) {
-  const response = await fetch(`${process.env.NEXT_PUBLIC_HASURA_ENDPOINT}`, {
+  const HASURA_ENDPOINT = process.env.HASURA_ENDPOINT || 'http://localhost:8080/v1/graphql';
+  const response = await fetch(`${HASURA_ENDPOINT}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -37,7 +38,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const decoded = jwt.decode(token) as DecodedToken;
+    const JWT_SECRET = process.env.JWT_SECRET || 'intern-mgmt-jwt-secret-change-in-prod';
+    const decoded = jwt.verify(token, JWT_SECRET) as DecodedToken;
     const userRole = decoded['https://hasura.io/jwt/claims']['x-hasura-role'];
     const departmentId = decoded['https://hasura.io/jwt/claims']['x-hasura-department-id'];
 
@@ -106,7 +108,7 @@ export async function POST(request: NextRequest) {
           }
         }
       `;
-      
+
       await executeGraphQL(deleteQuery, { task_id: id }, process.env.HASURA_ADMIN_SECRET!);
 
       // Insert new task_interns entries
@@ -134,7 +136,7 @@ export async function POST(request: NextRequest) {
             }
           }
         `;
-        
+
         await executeGraphQL(updateFirstInternQuery, { id, intern_id: intern_ids[0] }, process.env.HASURA_ADMIN_SECRET!);
       }
     }

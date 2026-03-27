@@ -132,11 +132,13 @@ export const GET_TASKS = gql`
       tags
       created_at
       updated_at
-      interns {
-        id
-        name
-        email
-      }
+      task_interns {
+  intern {
+    id
+    name
+    email
+  }
+}
     }
     tasks_aggregate(where: $where) {
       aggregate { count }

@@ -237,8 +237,6 @@ CREATE INDEX IF NOT EXISTS idx_interns_department ON interns(department_id);
 CREATE INDEX IF NOT EXISTS idx_interns_status     ON interns(status);
 CREATE INDEX IF NOT EXISTS idx_interns_mentor     ON interns(mentor_id);
 CREATE INDEX IF NOT EXISTS idx_interns_email      ON interns(email);
-CREATE INDEX IF NOT EXISTS idx_attendance_intern  ON attendance(intern_id, date);
-CREATE INDEX IF NOT EXISTS idx_reviews_intern     ON performance_reviews(intern_id);
 
 -- Task indexes
 CREATE INDEX IF NOT EXISTS idx_tasks_intern       ON tasks(intern_id);
@@ -248,8 +246,8 @@ CREATE INDEX IF NOT EXISTS idx_tasks_due_date     ON tasks(due_date);
 CREATE INDEX IF NOT EXISTS idx_tasks_assigned_by  ON tasks(assigned_by);
 
 -- Task interns indexes
-CREATE INDEX IF NOT EXISTS idx_task_interns_task     ON task_interns(task_id);
-CREATE INDEX IF NOT EXISTS idx_task_interns_intern   ON task_interns(intern_id);
+CREATE INDEX IF NOT EXISTS idx_task_interns_task   ON task_interns(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_interns_intern ON task_interns(intern_id);
 
 -- Task comments & activity indexes
 CREATE INDEX IF NOT EXISTS idx_task_comments_task ON task_comments(task_id);

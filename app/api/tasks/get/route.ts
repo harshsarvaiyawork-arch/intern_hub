@@ -11,7 +11,8 @@ interface DecodedToken {
 }
 
 async function executeGraphQL(query: string, variables: any, adminSecret: string) {
-  const response = await fetch(`${process.env.NEXT_PUBLIC_HASURA_ENDPOINT}`, {
+  const HASURA_ENDPOINT = process.env.HASURA_ENDPOINT || 'http://localhost:8080/v1/graphql';
+  const response = await fetch(`${HASURA_ENDPOINT}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -36,7 +37,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const decoded = jwt.decode(token) as DecodedToken;
+    const JWT_SECRET = process.env.JWT_SECRET || 'intern-mgmt-jwt-secret-change-in-prod';
+    const decoded = jwt.verify(token, JWT_SECRET) as DecodedToken;
     const userRole = decoded['https://hasura.io/jwt/claims']['x-hasura-role'];
     const departmentId = decoded['https://hasura.io/jwt/claims']['x-hasura-department-id'];
     const userId = decoded['https://hasura.io/jwt/claims']['x-hasura-user-id'];
@@ -89,9 +91,9 @@ export async function GET(request: NextRequest) {
         }
       }
     `;
-    
+
     const internMapResult = await executeGraphQL(internMapQuery, {}, process.env.HASURA_ADMIN_SECRET!);
-    
+
     // Build task_id -> intern_ids map
     const taskInternMap = new Map<string, string[]>();
     for (const ti of internMapResult.data.task_interns) {

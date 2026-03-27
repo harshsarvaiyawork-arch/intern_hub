@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 
+const JWT_SECRET = process.env.JWT_SECRET || 'intern-mgmt-jwt-secret-change-in-prod';
+
 export interface DecodedToken {
   sub: string;
   'https://hasura.io/jwt/claims': {
@@ -10,28 +12,20 @@ export interface DecodedToken {
   };
 }
 
-/**
- * Extract and decode JWT token from Authorization header
- */
 export function extractToken(request: NextRequest): string | null {
   const authHeader = request.headers.get('Authorization');
   return authHeader?.replace('Bearer ', '') || null;
 }
 
-/**
- * Decode JWT token (without verification - for getting claims)
- */
+// ✅ FIXED: use verify() instead of decode()
 export function decodeToken(token: string): DecodedToken | null {
   try {
-    return jwt.decode(token) as DecodedToken;
+    return jwt.verify(token, JWT_SECRET) as DecodedToken;
   } catch (err) {
-    return null;
+    return null; // expired, tampered, or invalid
   }
 }
 
-/**
- * Get user info from token
- */
 export function getUserFromToken(decoded: DecodedToken) {
   return {
     userId: decoded['https://hasura.io/jwt/claims']['x-hasura-user-id'],
@@ -40,9 +34,6 @@ export function getUserFromToken(decoded: DecodedToken) {
   };
 }
 
-/**
- * Check if user is authenticated
- */
 export function checkAuth(request: NextRequest): {
   success: boolean;
   response?: NextResponse;
@@ -52,42 +43,33 @@ export function checkAuth(request: NextRequest): {
   if (!token) {
     return {
       success: false,
-      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+      response: NextResponse.json({ error: 'Unauthorized - no token' }, { status: 401 }),
     };
   }
 
-  const decoded = decodeToken(token);
+  const JWT_SECRET = process.env.JWT_SECRET || 'intern-mgmt-jwt-secret-change-in-prod';
+  const decoded = jwt.verify(token, JWT_SECRET) as DecodedToken;
   if (!decoded) {
     return {
       success: false,
-      response: NextResponse.json({ error: 'Invalid token' }, { status: 401 }),
+      response: NextResponse.json({ error: 'Unauthorized - invalid or expired token' }, { status: 401 }),
     };
   }
 
   return { success: true, decoded };
 }
 
-/**
- * Check if user has admin role
- */
 export function checkAdminRole(decoded: DecodedToken): boolean {
   return decoded['https://hasura.io/jwt/claims']['x-hasura-role'] === 'admin';
 }
 
-/**
- * Check if user is admin, return error response if not
- */
 export function requireAdmin(decoded: DecodedToken): NextResponse | null {
   if (!checkAdminRole(decoded)) {
-    console.warn(`[AUTH] Permission denied: user attempted non-admin operation`);
     return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
   }
   return null;
 }
 
-/**
- * Log permission denial
- */
 export function logPermissionDenial(userId: string, role: string, operation: string): void {
   console.warn(`[AUTH] Permission denied - User: ${userId}, Role: ${role}, Operation: ${operation}`);
 }
